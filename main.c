@@ -90,6 +90,51 @@ static void destroy_window_delete_event_handler_data(gpointer _data, GClosure* c
     window_delete_event_handler_data_free(data);
 }
 
+static gboolean window_configure_event_handler(GtkWidget* window, GdkEvent* event, gpointer _data) {
+    (void)window;
+    (void)_data;
+
+    g_print(
+        "window/configure-event: send_event = %hhd, x = %d, y = %d, width = %d, height = %d\n",
+        event->configure.send_event,
+        event->configure.x,
+        event->configure.y,
+        event->configure.width,
+        event->configure.height
+    );
+
+    return GDK_EVENT_PROPAGATE;
+}
+
+static void window_size_allocate_handler(GtkWidget* window, GdkRectangle* allocation, gpointer _data) {
+    (void)window;
+    (void)_data;
+
+    g_print(
+        "window/size-allocate: x = %d, y = %d, width = %d, height = %d\n",
+        allocation->x,
+        allocation->y,
+        allocation->width,
+        allocation->height
+    );
+}
+
+static void vertical_paned_notify_position_handler(GObject* vertical_paned, GParamSpec* pspec, gpointer _data) {
+    (void)vertical_paned;
+    (void)pspec;
+    (void)_data;
+
+    g_print("vertical_paned/notify::position\n");
+}
+
+static void horizontal_paned_notify_position_handler(GObject* horizontal_paned, GParamSpec* pspec, gpointer _data) {
+    (void)horizontal_paned;
+    (void)pspec;
+    (void)_data;
+
+    g_print("horizontal_paned/notify::position\n");
+}
+
 static void app_activate_handler(GtkApplication* app, gpointer _data) {
     (void)_data;
 
@@ -217,6 +262,11 @@ static void app_activate_handler(GtkApplication* app, gpointer _data) {
     );
 
     // Show the UI:
+
+    g_signal_connect(window, "configure-event", G_CALLBACK(window_configure_event_handler), NULL);
+    g_signal_connect(window, "size-allocate", G_CALLBACK(window_size_allocate_handler), NULL);
+    g_signal_connect(vertical_paned, "notify::position", G_CALLBACK(vertical_paned_notify_position_handler), NULL);
+    g_signal_connect(horizontal_paned, "notify::position", G_CALLBACK(horizontal_paned_notify_position_handler), NULL);
 
     gtk_widget_grab_focus(left_text_view);
     gtk_widget_show_all(window);
