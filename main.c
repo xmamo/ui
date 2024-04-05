@@ -26,7 +26,49 @@ static void window_delete_event_handler_data_free(WindowDeleteEventHandlerData* 
     g_free(data);
 }
 
+static void print_gdk_window_state(GdkWindowState state) {
+    static const struct { GdkWindowState value; const char* name; } enumerators[] = {
+        {GDK_WINDOW_STATE_WITHDRAWN, "GDK_WINDOW_STATE_WITHDRAWN"},
+        {GDK_WINDOW_STATE_ICONIFIED, "GDK_WINDOW_STATE_ICONIFIED"},
+        {GDK_WINDOW_STATE_MAXIMIZED, "GDK_WINDOW_STATE_MAXIMIZED"},
+        {GDK_WINDOW_STATE_STICKY, "GDK_WINDOW_STATE_STICKY"},
+        {GDK_WINDOW_STATE_FULLSCREEN, "GDK_WINDOW_STATE_FULLSCREEN"},
+        {GDK_WINDOW_STATE_ABOVE, "GDK_WINDOW_STATE_ABOVE"},
+        {GDK_WINDOW_STATE_BELOW, "GDK_WINDOW_STATE_BELOW"},
+        {GDK_WINDOW_STATE_FOCUSED, "GDK_WINDOW_STATE_FOCUSED"},
+        {GDK_WINDOW_STATE_TILED, "GDK_WINDOW_STATE_TILED"},
+        {GDK_WINDOW_STATE_TOP_TILED, "GDK_WINDOW_STATE_TOP_TILED"},
+        {GDK_WINDOW_STATE_TOP_RESIZABLE, "GDK_WINDOW_STATE_TOP_RESIZABLE"},
+        {GDK_WINDOW_STATE_RIGHT_TILED, "GDK_WINDOW_STATE_RIGHT_TILED"},
+        {GDK_WINDOW_STATE_RIGHT_RESIZABLE, "GDK_WINDOW_STATE_RIGHT_RESIZABLE"},
+        {GDK_WINDOW_STATE_BOTTOM_TILED, "GDK_WINDOW_STATE_BOTTOM_TILED"},
+        {GDK_WINDOW_STATE_BOTTOM_RESIZABLE, "GDK_WINDOW_STATE_BOTTOM_RESIZABLE"},
+        {GDK_WINDOW_STATE_LEFT_TILED, "GDK_WINDOW_STATE_LEFT_TILED"},
+        {GDK_WINDOW_STATE_LEFT_RESIZABLE, "GDK_WINDOW_STATE_LEFT_RESIZABLE"},
+    };
+
+    const char* pipe = "";
+
+    for (size_t i = 0; i < sizeof(enumerators) / sizeof(*enumerators); ++i) {
+        if ((state & enumerators[i].value) != 0) {
+            g_print("%s%s", pipe, enumerators[i].name);
+            state &= ~enumerators[i].value;
+            pipe = " | ";
+        }
+    }
+
+    if (state != 0) {
+        g_print("%s0x%X", pipe, state);
+    }
+}
+
 static gboolean window_state_event_handler(GtkWidget* window, GdkEvent* event, gpointer _data) {
+    g_print("window/state-event: send_event = %hhd, changed_mask = ", event->window_state.send_event);
+    print_gdk_window_state(event->window_state.changed_mask);
+    g_print(", new_window_state = ");
+    print_gdk_window_state(event->window_state.new_window_state);
+    g_print("\n");
+
     GKeyFile* key_file = _data;
 
     if ((event->window_state.new_window_state & WINDOW_STATE_WITHDRAWN_OR_ICONIFIED_OR_MAXIMIZED_OR_FULLSCREEN) == 0) {
