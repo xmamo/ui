@@ -1,180 +1,52 @@
 #include <gtk/gtk.h>
 
-#define WINDOW_STATE_WITHDRAWN_OR_ICONIFIED_OR_MAXIMIZED_OR_FULLSCREEN \
-(GDK_WINDOW_STATE_WITHDRAWN | GDK_WINDOW_STATE_ICONIFIED | GDK_WINDOW_STATE_MAXIMIZED | GDK_WINDOW_STATE_FULLSCREEN)
-
-typedef struct WindowDeleteEventHandlerData {
-    GKeyFile* key_file;
-    GtkWidget* vertical_paned;
-    GtkWidget* horizontal_paned;
-} WindowDeleteEventHandlerData;
-
-static WindowDeleteEventHandlerData* window_delete_event_handler_data_new(
-    GKeyFile* key_file,
-    GtkWidget* vertical_paned,
-    GtkWidget* horizontal_paned
-) {
-    WindowDeleteEventHandlerData* data = g_malloc(sizeof(WindowDeleteEventHandlerData));
-    data->key_file = g_key_file_ref(key_file);
-    data->vertical_paned = vertical_paned;
-    data->horizontal_paned = horizontal_paned;
-    return data;
-}
-
-static void window_delete_event_handler_data_free(WindowDeleteEventHandlerData* data) {
-    g_key_file_unref(data->key_file);
-    g_free(data);
-}
-
-static void print_gdk_window_state(GdkWindowState state) {
-    static const struct { GdkWindowState value; const char* name; } enumerators[] = {
-        {GDK_WINDOW_STATE_WITHDRAWN, "GDK_WINDOW_STATE_WITHDRAWN"},
-        {GDK_WINDOW_STATE_ICONIFIED, "GDK_WINDOW_STATE_ICONIFIED"},
-        {GDK_WINDOW_STATE_MAXIMIZED, "GDK_WINDOW_STATE_MAXIMIZED"},
-        {GDK_WINDOW_STATE_STICKY, "GDK_WINDOW_STATE_STICKY"},
-        {GDK_WINDOW_STATE_FULLSCREEN, "GDK_WINDOW_STATE_FULLSCREEN"},
-        {GDK_WINDOW_STATE_ABOVE, "GDK_WINDOW_STATE_ABOVE"},
-        {GDK_WINDOW_STATE_BELOW, "GDK_WINDOW_STATE_BELOW"},
-        {GDK_WINDOW_STATE_FOCUSED, "GDK_WINDOW_STATE_FOCUSED"},
-        {GDK_WINDOW_STATE_TILED, "GDK_WINDOW_STATE_TILED"},
-        {GDK_WINDOW_STATE_TOP_TILED, "GDK_WINDOW_STATE_TOP_TILED"},
-        {GDK_WINDOW_STATE_TOP_RESIZABLE, "GDK_WINDOW_STATE_TOP_RESIZABLE"},
-        {GDK_WINDOW_STATE_RIGHT_TILED, "GDK_WINDOW_STATE_RIGHT_TILED"},
-        {GDK_WINDOW_STATE_RIGHT_RESIZABLE, "GDK_WINDOW_STATE_RIGHT_RESIZABLE"},
-        {GDK_WINDOW_STATE_BOTTOM_TILED, "GDK_WINDOW_STATE_BOTTOM_TILED"},
-        {GDK_WINDOW_STATE_BOTTOM_RESIZABLE, "GDK_WINDOW_STATE_BOTTOM_RESIZABLE"},
-        {GDK_WINDOW_STATE_LEFT_TILED, "GDK_WINDOW_STATE_LEFT_TILED"},
-        {GDK_WINDOW_STATE_LEFT_RESIZABLE, "GDK_WINDOW_STATE_LEFT_RESIZABLE"},
-    };
-
-    const char* pipe = "";
-
-    for (size_t i = 0; i < sizeof(enumerators) / sizeof(*enumerators); ++i) {
-        if ((state & enumerators[i].value) != 0) {
-            g_print("%s%s", pipe, enumerators[i].name);
-            state &= ~enumerators[i].value;
-            pipe = " | ";
-        }
-    }
-
-    if (state != 0) {
-        g_print("%s0x%X", pipe, state);
-    }
-}
-
-static gboolean window_state_event_handler(GtkWidget* window, GdkEvent* event, gpointer _data) {
-    g_print("window/state-event: send_event = %hhd, changed_mask = ", event->window_state.send_event);
-    print_gdk_window_state(event->window_state.changed_mask);
-    g_print(", new_window_state = ");
-    print_gdk_window_state(event->window_state.new_window_state);
-    g_print("\n");
-
-    GKeyFile* key_file = _data;
-
-    if ((event->window_state.new_window_state & WINDOW_STATE_WITHDRAWN_OR_ICONIFIED_OR_MAXIMIZED_OR_FULLSCREEN) == 0) {
-        gint position[2];
-        gtk_window_get_position(GTK_WINDOW(window), &position[0], &position[1]);
-        g_key_file_set_integer_list(key_file, "window", "position", position, 2);
-
-        gint size[2];
-        gtk_window_get_size(GTK_WINDOW(window), &size[0], &size[1]);
-        g_key_file_set_integer_list(key_file, "window", "size", size, 2);
-    }
-
-    return GDK_EVENT_PROPAGATE;
-}
-
-static void destroy_window_state_event_handler_data(gpointer _data, GClosure* closure) {
-    GKeyFile* key_file = _data;
-    (void)closure;
-
-    g_key_file_unref(key_file);
-}
-
-static gboolean window_delete_event_handler(GtkWidget* window, GdkEvent* event, gpointer _data) {
-    (void)event;
-    const WindowDeleteEventHandlerData* data = _data;
-
-    {
-        GdkWindowState state = gdk_window_get_state(gtk_widget_get_window(window));
-        g_key_file_set_boolean(data->key_file, "window", "maximized", (state & GDK_WINDOW_STATE_MAXIMIZED) != 0);
-
-        if ((state & WINDOW_STATE_WITHDRAWN_OR_ICONIFIED_OR_MAXIMIZED_OR_FULLSCREEN) == 0) {
-            gint position[2];
-            gtk_window_get_position(GTK_WINDOW(window), &position[0], &position[1]);
-            g_key_file_set_integer_list(data->key_file, "window", "position", position, 2);
-
-            gint size[2];
-            gtk_window_get_size(GTK_WINDOW(window), &size[0], &size[1]);
-            g_key_file_set_integer_list(data->key_file, "window", "size", size, 2);
-        }
-    }
-
-    {
-        gint position = gtk_paned_get_position(GTK_PANED(data->vertical_paned));
-        g_key_file_set_integer(data->key_file, "vertical_paned", "position", position);
-    }
-
-    {
-        gint position = gtk_paned_get_position(GTK_PANED(data->horizontal_paned));
-        g_key_file_set_integer(data->key_file, "horizontal_paned", "position", position);
-    }
-
-    g_key_file_save_to_file(data->key_file, "ui.ini", NULL);
-
-    return GDK_EVENT_PROPAGATE;
-}
-
-static void destroy_window_delete_event_handler_data(gpointer _data, GClosure* closure) {
-    WindowDeleteEventHandlerData* data = _data;
-    (void)closure;
-
-    window_delete_event_handler_data_free(data);
-}
-
-static gboolean window_configure_event_handler(GtkWidget* window, GdkEvent* event, gpointer _data) {
-    (void)window;
-    (void)_data;
-
-    g_print(
-        "window/configure-event: send_event = %hhd, x = %d, y = %d, width = %d, height = %d\n",
-        event->configure.send_event,
-        event->configure.x,
-        event->configure.y,
-        event->configure.width,
-        event->configure.height
-    );
-
-    return GDK_EVENT_PROPAGATE;
-}
-
-static void window_size_allocate_handler(GtkWidget* window, GdkRectangle* allocation, gpointer _data) {
-    (void)window;
-    (void)_data;
-
-    g_print(
-        "window/size-allocate: x = %d, y = %d, width = %d, height = %d\n",
-        allocation->x,
-        allocation->y,
-        allocation->width,
-        allocation->height
-    );
-}
-
 static void vertical_paned_notify_position_handler(GObject* vertical_paned, GParamSpec* pspec, gpointer _data) {
-    (void)vertical_paned;
     (void)pspec;
-    (void)_data;
+    GKeyFile* key_file = _data;
 
-    g_print("vertical_paned/notify::position\n");
+    g_key_file_set_integer(key_file, "vertical_paned", "position", gtk_paned_get_position(GTK_PANED(vertical_paned)));
 }
 
 static void horizontal_paned_notify_position_handler(GObject* horizontal_paned, GParamSpec* pspec, gpointer _data) {
-    (void)horizontal_paned;
     (void)pspec;
-    (void)_data;
+    GKeyFile* key_file = _data;
 
-    g_print("horizontal_paned/notify::position\n");
+    g_key_file_set_integer(key_file, "horizontal_paned", "position", gtk_paned_get_position(GTK_PANED(horizontal_paned)));
+}
+
+static gboolean window_state_event_handler(GtkWidget* window, GdkEvent* event, gpointer _data) {
+    GKeyFile* key_file = _data;
+
+    gboolean maximized = (event->window_state.new_window_state & GDK_WINDOW_STATE_MAXIMIZED) != 0;
+    g_key_file_set_boolean(key_file, "window", "maximized", maximized);
+
+    return GDK_EVENT_PROPAGATE;
+}
+
+static void window_size_allocate_handler(GtkWidget* window, GtkAllocation* allocation, gpointer _data) {
+    GKeyFile* key_file = _data;
+    (void)allocation;
+
+    GError* error = NULL;
+    gboolean maximized = g_key_file_get_boolean(key_file, "window", "maximized", &error);
+
+    if (error == NULL) {
+        if (!maximized) {
+            gint size[2];
+            gtk_window_get_size(GTK_WINDOW(window), &size[0], &size[1]);
+            g_key_file_set_integer_list(key_file, "window", "size", size, 2);
+        }
+    } else {
+        g_error_free(error);
+    }
+}
+
+static void window_destroy_handler(GtkWidget* window, gpointer _data) {
+    (void)window;
+    GKeyFile* key_file = _data;
+
+    g_key_file_save_to_file(key_file, "ui.ini", NULL);
+    g_key_file_unref(key_file);
 }
 
 static void app_activate_handler(GtkApplication* app, gpointer _data) {
@@ -219,27 +91,11 @@ static void app_activate_handler(GtkApplication* app, gpointer _data) {
     {
         gsize length;
         GError* error = NULL;
-        gint* position = g_key_file_get_integer_list(key_file, "window", "position", &length, &error);
-
-        if (error == NULL) {
-            if (length == 2) {
-                gtk_window_move(GTK_WINDOW(window), position[0], position[1]);
-            }
-
-            g_free(position);
-        } else {
-            g_error_free(error);
-        }
-    }
-
-    {
-        gsize length;
-        GError* error = NULL;
         gint* size = g_key_file_get_integer_list(key_file, "window", "size", &length, &error);
 
         if (error == NULL) {
             if (length == 2) {
-                gtk_window_resize(GTK_WINDOW(window), size[0], size[1]);
+                gtk_window_set_default_size(GTK_WINDOW(window), size[0], size[1]);
             }
 
             g_free(size);
@@ -285,37 +141,16 @@ static void app_activate_handler(GtkApplication* app, gpointer _data) {
 
     // Connect the signal handlers to save the UI state:
 
-    g_signal_connect_data(
-        window,
-        "window-state-event",
-        G_CALLBACK(window_state_event_handler),
-        g_key_file_ref(key_file),
-        destroy_window_state_event_handler_data,
-        G_CONNECT_DEFAULT
-    );
-
-    g_signal_connect_data(
-        window,
-        "delete-event",
-        G_CALLBACK(window_delete_event_handler),
-        window_delete_event_handler_data_new(key_file, vertical_paned, horizontal_paned),
-        destroy_window_delete_event_handler_data,
-        G_CONNECT_DEFAULT
-    );
+    g_signal_connect(horizontal_paned, "notify::position", G_CALLBACK(horizontal_paned_notify_position_handler), key_file);
+    g_signal_connect(vertical_paned, "notify::position", G_CALLBACK(vertical_paned_notify_position_handler), key_file);
+    g_signal_connect(window, "window-state-event", G_CALLBACK(window_state_event_handler), key_file);
+    g_signal_connect(window, "size-allocate", G_CALLBACK(window_size_allocate_handler), key_file);
+    g_signal_connect(window, "destroy", G_CALLBACK(window_destroy_handler), key_file);
 
     // Show the UI:
 
-    g_signal_connect(window, "configure-event", G_CALLBACK(window_configure_event_handler), NULL);
-    g_signal_connect(window, "size-allocate", G_CALLBACK(window_size_allocate_handler), NULL);
-    g_signal_connect(vertical_paned, "notify::position", G_CALLBACK(vertical_paned_notify_position_handler), NULL);
-    g_signal_connect(horizontal_paned, "notify::position", G_CALLBACK(horizontal_paned_notify_position_handler), NULL);
-
     gtk_widget_grab_focus(left_text_view);
     gtk_widget_show_all(window);
-
-    // Unreference pending objects:
-
-    g_key_file_unref(key_file);
 }
 
 int main(int argc, char** argv) {
